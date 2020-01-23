@@ -23,7 +23,13 @@ spec:
         tier: analyzer
     spec:
       serviceAccountName: skydive-service-account
+      hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      hostPID: true
+      hostIPC: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
       affinity:
         {{- include "nodeaffinity" . | indent 6 }}
       {{- if .Values.image.secretName }}
@@ -45,6 +51,19 @@ spec:
         - containerPort: {{ .Values.service.port }}
           protocol: UDP
         - containerPort: {{ .Values.etcd.port }}
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: false
+          runAsUser: 0
+          capabilities:
+                add:
+                - SYS_ADMIN
+                - SYS_RESOURCE
+                - SYS_TIME
+                - NET_BROADCAST
+                - NET_ADMIN
         readinessProbe:
           httpGet:
             port: {{ .Values.service.port }}
@@ -110,11 +129,94 @@ spec:
       {{- if .Values.env }}
 {{ toYaml .Values.env | indent 8 }}
       {{- end }}
+{{- if .Values.exporter.enabled }}
+  {{- if .Values.exporter.env }}
+{{ toYaml .Values.exporter.env | indent 8 }}
+  {{- end }}
+{{- end }}
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: ssl
           mountPath: /etc/ssl/certs
+{{- if .Values.exporter.enabled }}
+      - name: skydive-exporter
+        image: {{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+        env:
+        - name: SKYDIVE_ANALYZERS
+          value: {{ template "fullname" . }}-service:{{ .Values.service.port }}
+        - name: SKYDIVE_PIPELINE_SUBSCRIBER_URL
+          value: ws://{{ template "fullname" . }}-service:{{ .Values.service.port }}/ws/subscriber/flow
+        - name: SKYDIVE_PIPELINE_STORE_BUFFERED_FILENAME_PREFIX
+          valueFrom:
+            configMapKeyRef:
+              name: skydive-exporter-s3-configuration
+              key: "objectPrefix"
+        - name: SKYDIVE_PIPELINE_WRITE_S3_ENDPOINT
+          valueFrom: 
+            configMapKeyRef:
+               name: "skydive-exporter-s3-configuration"
+               key: "endpoint"
+        - name: SKYDIVE_PIPELINE_WRITE_S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: "skydive-exporter-secret"
+              key: "accesskey"
+        - name: SKYDIVE_PIPELINE_WRITE_S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: "skydive-exporter-secret"
+              key: "secretkey"
+      {{- if .Values.exporter.write.s3.use_api_key }}
+        - name: SKYDIVE_PIPELINE_WRITE_S3_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: "skydive-exporter-secret"
+              key: "apikey"
+      {{- end }}
+        - name: SKYDIVE_PIPELINE_CLASSIFY_CLUSTER_NET_MASKS
+          valueFrom:
+            configMapKeyRef:
+              name: skydive-configuration
+              key: "netmasks"
+        - name: SKYDIVE_PIPELINE_STORE_BUFFERED_DIRNAME
+          valueFrom:
+            configMapKeyRef:
+              name: "skydive-exporter-s3-configuration"
+              key: "bucket"
+        - name: SKYDIVE_PIPELINE_WRITE_S3_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: "skydive-exporter-s3-configuration"
+              key: "region"
+      {{- if .Values.exporter.env_exporter }}
+{{ toYaml .Values.exporter.env_exporter | indent 8 }}
+      {{- end }}
+{{- end }}
+     {{- if and .Values.exporter.enabled .Values.exporter.write.s3.installLocalMinio }}
+      - name: skydive-minio
+        image: {{ .Values.exporter.write.s3.minioImage }}:{{ .Values.exporter.write.s3.minioImageTag }}
+        ports:
+        - name: skydive-minio
+          containerPort: 9000
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: {{ .Values.exporter.write.s3.access_key }}
+        - name: MINIO_SECRET_KEY
+          value: {{ .Values.exporter.write.s3.secret_key }}
+        - name: MINIO_DEFAULT_BUCKETS
+          value: {{ .Values.exporter.store.bucket }}
+        - name: MINIO_REGION_NAME
+          value: {{ .Values.exporter.write.s3.region }}
+        volumeMounts:
+        - name: "data"
+          mountPath: "/data"
+    {{- end }}
     {{- if .Values.persistence.enabled }}
       - name: skydive-elasticsearch
         image: {{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}
@@ -157,4 +259,7 @@ spec:
       - name: ssl
         hostPath:
           path: /etc/ssl/certs
-
+     {{- if and .Values.exporter.enabled .Values.exporter.write.s3.installLocalMinio }}
+      - name: data
+        emptyDir: {}
+    {{- end }}

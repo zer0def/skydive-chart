@@ -21,14 +21,18 @@ spec:
         heritage: "{{ .Release.Service }}"
         tier: agent
     spec:
+      serviceAccountName: skydive-service-account
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      hostPID: true
+      hostIPC: true
       securityContext:
         runAsNonRoot: false
       affinity:
         {{- include "nodeaffinity" . | indent 6 }}
       tolerations:
       - operator: "Exists"
+      hostNetwork: true
       {{- if .Values.image.secretName }}
       {{- if ne .Values.image.secretName ""}}
       imagePullSecrets:
@@ -74,6 +78,11 @@ spec:
       {{- if .Values.env }}
 {{ toYaml .Values.env | indent 8 }}
       {{- end }}
+{{- if .Values.exporter.enabled }}
+  {{- if .Values.exporter.env }}
+{{ toYaml .Values.exporter.env | indent 8 }}
+  {{- end }}
+{{- end }}
         securityContext:
           privileged: true
           readOnlyRootFilesystem: false

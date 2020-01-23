@@ -75,6 +75,17 @@ The chart can be customized using the following configuration parameters:
 | `dataVolume.existingClaimName`       | Provide an existing PersistentVolumeClaim       | `nil`                                                      |
 | `dataVolume.storageClassName`        | Storage class of backing PVC                    | `nil`                                                      |
 | `dataVolume.size`                    | Size of data volume                             | `10Gi`                                                     |
+| `exporter.enabled`                   | Export netflow data into Object Storage         | `false`                                                    |
+| `exporter.write.s3.endpoint`         | Endpoint of the Object Storage to be used       | `http://127.0.0.1:9000`                                    |
+| `exporter.write.s3.installLocalMinio`| Install default Minio Object Storage locally    | `true`                                                     |
+| `exporter.write.s3.region`           | Object Store region                             | `default`                                                  |
+| `exporter.write.s3.use_api_key`      | Use an api key for Object Store autentication   | `false`                                                    |
+| `exporter.write.s3.api_key`          | api key for Object Store autentication          | Empty                                                         |
+| `exporter.write.s3.access_key`       | access key for Object Store autentication       | `admin`                                                    |
+| `exporter.write.s3.secret_key`       | secret key for Object Store autentication       | `admin1234`                                                |
+| `exporter.store.bucket`              | bucket name to be used in Object Store          | `default`                                                  |
+| `exporter.store.objectPrefix`        | prefix of stroed objects                        | `default`                                                  |
+
 
 Specify parameters using `--set key=value[,key=value]` argument to `helm install`
 
@@ -112,6 +123,47 @@ The chart mounts a [Persistent Volume](http://kubernetes.io/docs/user-guide/pers
 
 To make Elasticsearch work properly the user needs to set kernel setting vm.max_map_count to at least 262144 on each worker node. Please check
 [https://www.elastic.co/guide/en/elasticsearch/reference/5.5/docker.html](https://www.elastic.co/guide/en/elasticsearch/reference/5.5/docker.html)
+
+### Skydive as netflow collector
+Skydive exporter component runs as part of the Skydive analyzer, and stores the collected netflow data into an S3 compatible Object Storage.
+
+1. place the following in a values.yaml file, and set the bucket, objectPrefix, endpoint, region, api_key (or use access key and secret key - then set use_api_key=false) to correct values. Any S3 compatible Object Storage can be used.
+```
+image:
+  repository: cognetive/skydive
+  tag: 2019.10.15___12.24
+exporter:
+  enabled: true
+  store:
+    bucket: "default"
+    objectPrefix: "default"
+  write:
+    s3:
+      #endpoint is a required value, pointing to a working Object Store endpoint Example value - "http://localhost:9000"
+      endpoint: "http://localhost:9000"
+      #installLocalMinio should be set to false. If set to true a default minio OS will be installed locally (in a container) for testing purposes only.
+      installLocalMinio: false
+      region: "default"
+      use_api_key: true
+      api_key: "api key value"
+      access_key: ""
+      secret_key: ""
+```
+
+2. create a configmap named "skydive-configuration" with a single entry netmasks, set to the correct netmasks of the cluster, as the example:
+ ```
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skydive-configuration
+data:
+  netmasks: "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.63.32.36/32 169.63.32.43/32 169.63.32.45/32"
+```
+
+3. 
+```bash
+helm install --name my-release --f vlaues.yaml stable/skydive
+```
 
 ## Documentation
 
