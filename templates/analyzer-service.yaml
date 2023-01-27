@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "skydive.fullname" . }}-analyzer"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ template "skydive.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  type: {{ .Values.analyzer.service.type | quote }}
+  ports:
+  - port: {{ .Values.analyzer.service.port }}
+    name: {{ .Values.analyzer.service.name | quote }}
+{{/*
+  {{- if .Values.newui.enabled }}
+  - port: {{ .Values.newui.port }}
+    name: newui
+    nodePort: {{ .Values.newui.nodePort }}
+  {{- end }}
+*/}}
+  selector:
+    app: {{ template "skydive.fullname" . }}
+    release: {{ .Release.Name | quote }}
+    tier: analyzer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "skydive.fullname" . }}-analyzer-internal"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ template "skydive.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  clusterIP: None
+  type: ClusterIP
+  ports:
+  - port: {{ .Values.analyzer.service.port }}
+    name: {{ .Values.analyzer.service.name | quote }}
+  - port: {{ .Values.analyzer.service.etcdPort }}
+    name: etcd
+  selector:
+    app: {{ template "skydive.fullname" . }}
+    release: {{ .Release.Name | quote }}
+    tier: analyzer

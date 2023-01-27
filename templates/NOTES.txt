@@ -3,18 +3,18 @@ To access skydive GUI execute:
 (Bear with us couple of seconds until Skydive starts ...)
 
 
-{{- if contains "NodePort" .Values.service.type }}
-export UI_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }}-service)
+{{- if contains "NodePort" .Values.analyzer.service.type }}
+export UI_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "skydive.fullname" . }})
 export UI_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
 echo "skydive end-point: http://$UI_IP:$UI_PORT"
-{{- else if contains "LoadBalancer" .Values.service.type }}
-export UI_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "fullname" . }}-service)
-export UI_IP=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.status.loadBalancer.ingress[0].ip}" services {{ template "fullname" . }}-service)
+{{- else if contains "LoadBalancer" .Values.analyzer.service.type }}
+export UI_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "skydive.fullname" . }})
+export UI_IP=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.status.loadBalancer.ingress[0].ip}" services {{ template "skydive.fullname" . }})
 echo "skydive end-point: http://$UI_IP:$UI_PORT"
 {{- else  }}
-export UI_SERVICE=$(kubectl get --namespace {{ .Release.Namespace }} services {{ template "fullname" . }}-service)
+export UI_SERVICE=$(kubectl get --namespace {{ .Release.Namespace }} services {{ template "skydive.fullname" . }})
 echo -e "To access skydive use details from\n\n$UI_SERVICE"
 {{- end }}
 
 
-      
+

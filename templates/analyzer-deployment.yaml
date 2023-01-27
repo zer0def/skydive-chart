@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment  # with ES bundled in, this would've been a StatefulSet, btw
+metadata:
+  name: "{{ template "skydive.fullname" . }}-analyzer"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ template "skydive.fullname" . }}
+    chart: {{ .Chart.Name | quote }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+spec:
+  #replicas: 1
+  replicas: {{ .Values.analyzer.replicas }}
+  selector:
+    matchLabels:
+      app: {{ template "skydive.fullname" . }}
+      chart: {{ .Chart.Name | quote }}
+      release: {{ .Release.Name | quote }}
+      heritage: {{ .Release.Service | quote }}
+      tier: analyzer
+  template:
+    metadata:
+      annotations:
+        productName: {{ .Chart.Name | quote }}
+        productID: 8e6bdbcba44f46939c3d1c54447386b2
+        productVersion: {{ .Chart.Version | quote }}
+      labels:
+        app: {{ template "skydive.fullname" . }}
+        chart: {{ .Chart.Name | quote }}
+        release: {{ .Release.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
+        tier: analyzer
+    spec:
+      serviceAccountName: "{{ template "skydive.fullname" . }}-analyzer"
+      dnsPolicy: ClusterFirstWithHostNet
+{{- with .Values.analyzer.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.analyzer.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.analyzer.tolerations }}
+      tolerations:
+{{ toYaml . | indent 6 }}
+{{- end }}
+      {{- if and .Values.image.secretName (ne .Values.image.secretName "") }}
+      imagePullSecrets:
+      - name: {{ .Values.image.secretName | quote }}
+      {{- end }}
+      volumes:
+      - name: ssl
+        hostPath:
+          path: /etc/ssl/certs
+      containers:
+      - name: analyzer
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ default "" .Values.image.imagePullPolicy | quote }}
+        terminationMessagePolicy: FallbackToLogsOnError
+        args:
+        - analyzer
+        - "--listen=0.0.0.0:{{ .Values.analyzer.service.port }}"
+        ports:
+        - containerPort: {{ .Values.analyzer.service.port }}
+        - containerPort: {{ .Values.analyzer.service.port }}
+          protocol: UDP
+        readinessProbe:
+          httpGet:
+            port: {{ .Values.analyzer.service.port }}
+            path: /api/status
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            port: {{ .Values.analyzer.service.port }}
+            path: /api/status
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          failureThreshold: 10
+        env:
+        - name: SKYDIVE_ANALYZER_TOPOLOGY_PROBES
+          value: "k8s"
+        - name: SKYDIVE_ANALYZER_TOPOLOGY_FABRIC
+          value: {{ .Values.analyzer.topology.fabric | quote }}
+        - name: SKYDIVE_ETCD_LISTEN
+          value: "0.0.0.0:{{ .Values.analyzer.service.etcdPort }}"
+        - name: SKYDIVE_EMBEDDED
+          value: "true"
+        - name: SKYDIVE_FLOW_PROTOCOL
+          value: "websocket"
+{{ if .Values.analyzer.elasticsearch.enabled }}
+        - name: SKYDIVE_ANALYZER_FLOW_BACKEND
+          value: "elasticsearchflow"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_DRIVER
+          value: "elasticsearch"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_HOST
+          value: "{{ .Values.analyzer.elasticsearch.host }}:{{ .Values.analyzer.elasticsearch.port }}"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_INDICES_TO_KEEP
+          value: {{ .Values.storage.flows.indicesToKeep | quote }}
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_INDEX_ENTRIES_LIMIT
+          value: {{ .Values.storage.flows.indexEntriesLimit | quote }}
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_MAXCONNS
+          value: "10"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_BULK_MAXDOCS
+          value: "1000"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_BULK_MAXDELAY
+          value: "10"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHFLOW_RETRY
+          value: "5"
+
+        - name: SKYDIVE_ANALYZER_TOPOLOGY_BACKEND
+          value: "elasticsearchtopology"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_DRIVER
+          value: "elasticsearch"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_HOST
+          value: "{{ .Values.analyzer.elasticsearch.host }}:{{ .Values.analyzer.elasticsearch.port }}"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_INDICES_TO_KEEP
+          value: {{ .Values.storage.topology.indicesToKeep | quote }}
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_INDEX_ENTRIES_LIMIT
+          value: {{ .Values.storage.topology.indexEntriesLimit | quote }}
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_MAXCONNS
+          value: "10"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_BULK_MAXDOCS
+          value: "1000"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_BULK_MAXDELAY
+          value: "10"
+        - name: SKYDIVE_STORAGE_ELASTICSEARCHTOPOLOGY_RETRY
+          value: "5"
+{{ end }}
+{{- if and .Values.flowExporter.enabled .Values.flowExporter.env }}
+{{ toYaml .Values.flowExporter.env | indent 8 }}
+{{- end }}
+      {{- with .Values.analyzer.env }}
+{{ toYaml . | indent 8 }}
+      {{- end }}
+{{- with .Values.resources }}
+        resources:
+{{ toYaml . | indent 10 }}
+{{- end }}
+        volumeMounts:
+        - name: ssl
+          mountPath: /etc/ssl/certs
+{{/*
+{{- if .Values.newui.enabled }}
+      - name: ui
+        image: "{{ .Values.newui.image.repository }}:{{ .Values.newui.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.newui.port }}
+{{- end }}
+*/}}

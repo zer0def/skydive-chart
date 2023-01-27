@@ -1,0 +1,26 @@
+{{- if .Values.flowExporter.enabled }}
+# https://github.com/skydive-project/skydive-golang-operator/tree/main/assets/prometheus-connector
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ template "skydive.fullname" . }}-flow-exporter"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ template "skydive.fullname" . }}
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+
+spec:
+  ports:
+  - port: 9100
+    name: api
+    protocol: TCP
+    targetPort: 9100
+  selector:
+    app: {{ template "skydive.fullname" . }}
+    release: {{ .Release.Name | quote }}
+    tier: flow-exporter
+  sessionAffinity: None
+  #type: NodePort
+{{- end }}

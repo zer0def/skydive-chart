@@ -1,50 +1,56 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: {{ template "fullname" . }}-agent
+  name: "{{ template "skydive.fullname" . }}-agent"
+  namespace: {{ .Release.Namespace | quote }}
   labels:
-    app: {{ template "fullname" . }}
-    chart: "{{ .Chart.Name }}"
-    release: "{{ .Release.Name }}"
-    heritage: "{{ .Release.Service }}"
+    app: {{ template "skydive.fullname" . }}
+    chart: {{ .Chart.Name | quote }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
 spec:
   selector:
     matchLabels:
-      app: {{ template "fullname" . }}
+      app: {{ template "skydive.fullname" . }}
   template:
     metadata:
       annotations:
-        productName: {{ .Chart.Name }}
+        productName: {{ .Chart.Name | quote }}
         productID: 8e6bdbcba44f46939c3d1c54447386b2
-        productVersion: {{ .Chart.Version }}
+        productVersion: {{ .Chart.Version | quote }}
       labels:
-        app: {{ template "fullname" . }}
-        chart: "{{ .Chart.Name }}"
-        release: "{{ .Release.Name }}"
-        heritage: "{{ .Release.Service }}"
+        app: {{ template "skydive.fullname" . }}
+        chart: {{ .Chart.Name | quote }}
+        release: {{ .Release.Name | quote }}
+        heritage: {{ .Release.Service | quote }}
         tier: agent
     spec:
-      serviceAccountName: skydive-service-account
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       hostPID: true
       hostIPC: true
       securityContext:
         runAsNonRoot: false
+{{- with .Values.agent.affinity }}
       affinity:
-        {{- include "nodeaffinity" . | indent 6 }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.agent.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with .Values.agent.tolerations }}
       tolerations:
-      - operator: "Exists"
+{{ toYaml . | indent 6 }}
+{{- end }}
       hostNetwork: true
-      {{- if .Values.image.secretName }}
-      {{- if ne .Values.image.secretName ""}}
+      {{- if and .Values.image.secretName (ne .Values.image.secretName "") }}
       imagePullSecrets:
-      - name: {{ .Values.image.secretName }}
-      {{- end }}
+      - name: {{ .Values.image.secretName | quote }}
       {{- end }}
       containers:
-      - name: skydive-agent
-        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+      - name: agent
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.imagePullPolicy | default "" | quote }}
         terminationMessagePolicy: FallbackToLogsOnError
         args:
@@ -65,27 +71,27 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 10
           failureThreshold: 10
+{{- with .Values.resources }}
         resources:
-{{ toYaml .Values.resources | indent 10 }}
+{{ toYaml . | indent 10 }}
+{{- end }}
         env:
         - name: SKYDIVE_ANALYZERS
-          value: {{ template "fullname" . }}-service:{{ .Values.service.port }}
+          value: "{{ template "skydive.fullname" . }}-analyzer.{{ .Release.Namespace }}.svc:{{ .Values.analyzer.service.port }}"
         - name: SKYDIVE_FLOW_PROTOCOL
           value: websocket
         - name: SKYDIVE_FLOW_DEFAULT_LAYER_KEY_MODE
           value: L3
         - name: SKYDIVE_AGENT_TOPOLOGY_PROBES
-          value: {{ .Values.agent.topology.probes }}
+          value: {{ .Values.agent.topology.probes | quote }}
         - name: SKYDIVE_AGENT_TOPOLOGY_RUNC_RUN_PATH
           value: /var/run/runc /var/run/runc-ctrs /var/run/containerd/runc
-      {{- if .Values.env }}
-{{ toYaml .Values.env | indent 8 }}
-      {{- end }}
-{{- if .Values.exporter.enabled }}
-  {{- if .Values.exporter.env }}
-{{ toYaml .Values.exporter.env | indent 8 }}
-  {{- end }}
+{{- if and .Values.flowExporter.enabled .Values.flowExporter.env }}
+{{ toYaml .Values.flowExporter.env | indent 8 }}
 {{- end }}
+      {{- with .Values.agent.env }}
+{{ toYaml . | indent 8 }}
+      {{- end }}
         securityContext:
           privileged: true
           readOnlyRootFilesystem: false
@@ -93,8 +99,7 @@ spec:
           runAsNonRoot: false
           runAsUser: 0
           capabilities:
-            add:
-            - all
+            add: ["all"]
         volumeMounts:
         - name: docker
           mountPath: /var/run/docker.sock

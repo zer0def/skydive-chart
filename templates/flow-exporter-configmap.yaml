@@ -1,0 +1,20 @@
+{{- if .Values.flowExporter.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ template "skydive.fullname" . }}-flow-exporter"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ template "skydive.fullname" . }}
+    chart: {{ .Chart.Name | quote }}
+    release: {{ .Release.Name | quote }}
+    heritage: {{ .Release.Service | quote }}
+data:
+  endpoint: {{ .Values.flowExporter.write.s3.endpoint }}
+  region: {{ .Values.flowExporter.write.s3.region }}
+  bucket: {{ .Values.flowExporter.store.bucket }}
+  objectPrefix: {{ .Values.flowExporter.store.objectPrefix }}
+  iam_endpoint: {{ .Values.flowExporter.write.s3.iam_endpoint }}
+  netmasksAutodiscoveryType: {{ .Values.flowExporter.classify.type }}
+  netmasks: {{ .Values.flowExporter.classify.cluster_net_masks }}
+{{- end }}
